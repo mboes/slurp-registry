@@ -1,0 +1,7 @@
+resolver: lts-10.2
+packages:
+- .
+
+nix:
+  packages:
+  - zlib
