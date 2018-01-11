@@ -121,7 +121,7 @@ initRepository ro = do
   rootDir <- parseAbsDir $ ro ^. repositoryCacheDir . to T.unpack
   cacheDir <- createTempDir rootDir "slurp"
   git <- readCreateProcess (shell "which git") ""
-  callProcess git ["clone", ro ^. repositoryUrl . to T.unpack, toFilePath cacheDir]
+  callProcess "git" ["clone", ro ^. repositoryUrl . to T.unpack, toFilePath cacheDir]
   lock <- newMVar ()
   return $ Repository cacheDir git lock
 
