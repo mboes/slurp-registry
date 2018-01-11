@@ -3,4 +3,5 @@ packages:
 - .
 
 nix:
-  shell-file: shell.nix
+  packages:
+  - zlib
