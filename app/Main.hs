@@ -59,13 +59,14 @@ data RuntimeOptions w = RuntimeOptions
 
 instance ParseRecord (RuntimeOptions Opts.Wrapped) where
   parseRecord = parseRecordWithModifiers lispCaseModifiers
+
 deriving instance Show (RuntimeOptions Opts.Unwrapped)
 
-$(makeLenses ''RuntimeOptions)
+makeLenses ''RuntimeOptions
 
 type PackageAPI
-  = "packages" :> Get '[JSON] [Package]
-  :<|> "packages" :> ReqBody '[JSON] Package :> Post '[JSON] AddPackageResponse
+  = "packages" :> Get '[JSON] [Package] :<|>
+    "packages" :> ReqBody '[JSON] Package :> Post '[JSON] AddPackageResponse
 
 -- | Scheme through which this package's versions are served
 data Scheme
@@ -88,26 +89,26 @@ instance Ord Package where
 
 instance Aeson.ToJSON Package where
   toJSON Package{..} = Aeson.object
-    [ "name" .= name
-    , "location" .= URI.render location
-    , "date" .=
-        Time.formatTime
-          Time.defaultTimeLocale
-          (Time.iso8601DateFormat (Just "%H:%M:%SZ"))
-          date
-    , "scheme" .= show scheme
-    ]
+      [ "name" .= name
+      , "location" .= URI.render location
+      , "date" .=
+          Time.formatTime
+            Time.defaultTimeLocale
+            (Time.iso8601DateFormat (Just "%H:%M:%SZ"))
+            date
+      , "scheme" .= show scheme
+      ]
 
 instance Aeson.FromJSON Package where
   parseJSON = Aeson.withObject "Package" $ \v -> Package
-    <$> v .: "name"
-    <*> (do
-      txt <- v .: "location"
-      case URI.mkURI txt of
-        Left exc  -> fail (show exc)
-        Right uri -> return uri)
-    <*> v .: "date"
-    <*> v .: "scheme"
+      <$> v .: "name"
+      <*> (do
+        txt <- v .: "location"
+        case URI.mkURI txt of
+          Left exc  -> fail (show exc)
+          Right uri -> return uri)
+      <*> v .: "date"
+      <*> v .: "scheme"
 
 data Repository = Repository
   { repoPath      :: Path Abs Dir
@@ -122,23 +123,23 @@ withRepoLock (Repository path lock) f = withMVar lock $ \() -> f path
 -- | Initialise a local clone of the authoritative repository
 initRepository :: RuntimeOptions Opts.Unwrapped -> IO Repository
 initRepository ro = do
-  rootDir <- parseAbsDir $ ro ^. repositoryCacheDir . to T.unpack
-  cacheDir <- createTempDir rootDir "slurp"
-  callProcess "git" ["clone", ro ^. repositoryUrl . to T.unpack, toFilePath cacheDir]
-  lock <- newMVar ()
-  return $ Repository cacheDir lock
+    rootDir <- parseAbsDir $ ro^.repositoryCacheDir.to T.unpack
+    cacheDir <- createTempDir rootDir "slurp"
+    callProcess "git" ["clone", ro^.repositoryUrl.to T.unpack, toFilePath cacheDir]
+    lock <- newMVar ()
+    return $ Repository cacheDir lock
 
 -- | Sync the clone with upstream master
 syncRepository :: Repository -> IO ()
 syncRepository r = withRepoLock r $ \repo -> do
-  (ec, _, err) <-
-    readCreateProcessWithExitCode
-      (proc "git" ["pull", "origin", "master"]) { cwd = Just $ toFilePath repo }
-      ""
-  case ec of
-    ExitSuccess   -> return ()
-    ExitFailure _ -> do
-      error $ "Failed to sync upstream repository:\n" <> err
+    (ec, _, err) <-
+      readCreateProcessWithExitCode
+        (proc "git" ["pull", "origin", "master"]) { cwd = Just $ toFilePath repo }
+        ""
+    case ec of
+      ExitSuccess -> return ()
+      ExitFailure _ -> do
+        error $ "Failed to sync upstream repository:\n" <> err
 
 data AddPackageResponse
   = PackageAdded
@@ -158,46 +159,49 @@ instance Aeson.ToJSON AddPackageResponse
 --   - Push to upstream
 addPackage :: Repository -> Package -> IO AddPackageResponse
 addPackage repo package = do
-  syncRepository repo
-  let indexChar = T.index (name package) 0
-      packageFile = toFilePath (repoPath repo) </> [indexChar]
-  currentPackages <-
-    either (\(_:: SomeException) -> []) (fromMaybe [] . Aeson.decodeStrict)
-    <$> try (BS.readFile packageFile)
-  case find (\p -> name p == name package) currentPackages of
-    Nothing -> let newPackages = sort $ package : currentPackages in
-      withRepoLock repo $ \path -> do
-        BSL.writeFile packageFile $ Aeson.encode newPackages
-        (_, err, _) <-readCreateProcessWithExitCode
-          (proc "git" [ "add" , packageFile])
-          { cwd = Just $ toFilePath path }
-          ""
-        hPutStrLn stderr err
-        (_, err, _) <-readCreateProcessWithExitCode
-          (proc "git" [ "commit", "-m"
-                      , "Add package " <> (T.unpack $ name package)
-                      , "."
-                      ])
-          { cwd = Just $ toFilePath path }
-          ""
-        hPutStrLn stderr err
-        readCreateProcessWithExitCode
-          (proc "git" ["push", "origin", "master"])
-          { cwd = Just $ toFilePath path }
-          ""
-        return $ PackageAdded
-
-    Just exists -> return $ PackageAlreadyOwned exists
+    syncRepository repo
+    let indexChar = T.index (name package) 0
+        packageFile = toFilePath (repoPath repo) </> [indexChar]
+    currentPackages <-
+      either
+        (\(_:: SomeException) -> [])
+        (fromMaybe [] . Aeson.decodeStrict) <$>
+        try (BS.readFile packageFile)
+    case find (\p -> name p == name package) currentPackages of
+      Nothing -> let newPackages = sort $ package : currentPackages in
+        withRepoLock repo $ \path -> do
+          BSL.writeFile packageFile $ Aeson.encode newPackages
+          (_, err, _) <-readCreateProcessWithExitCode
+            (proc "git" [ "add" , packageFile])
+            { cwd = Just $ toFilePath path }
+            ""
+          hPutStrLn stderr err
+          (_, err, _) <-readCreateProcessWithExitCode
+            (proc "git" [ "commit", "-m"
+                        , "Add package " <> (T.unpack $ name package)
+                        , "."
+                        ])
+            { cwd = Just $ toFilePath path }
+            ""
+          hPutStrLn stderr err
+          readCreateProcessWithExitCode
+            (proc "git" ["push", "origin", "master"])
+            { cwd = Just $ toFilePath path }
+            ""
+          return $ PackageAdded
+      Just exists -> return $ PackageAlreadyOwned exists
 
 -- | List all packages
 listPackages :: Repository -> IO [Package]
 listPackages repo = do
-  syncRepository repo
-  (_, files) <- listDir $ repoPath repo
-  packages <- forM files $ \file -> do
-    either (\(_:: SomeException) -> []) (fromMaybe [] . Aeson.decodeStrict)
-    <$> try (BS.readFile $ toFilePath file)
-  return $ join packages
+    syncRepository repo
+    (_, files) <- listDir $ repoPath repo
+    packages <- forM files $ \file -> do
+      either
+        (\(_:: SomeException) -> [])
+        (fromMaybe [] . Aeson.decodeStrict) <$>
+        try (BS.readFile $ toFilePath file)
+    return $ join packages
 
 packageAPI :: Proxy PackageAPI
 packageAPI = Proxy
@@ -211,6 +215,6 @@ server repo = listPackagesHandler :<|> addPackageHandler
 
 main :: IO ()
 main = do
-  args <- unwrapRecord "slurp-registry"
-  repo <- initRepository args
-  Warp.run (args ^. serverPort . non 8081) (serve packageAPI $ server repo)
+    args <- unwrapRecord "slurp-registry"
+    repo <- initRepository args
+    Warp.run (args^.serverPort.non 8081) (serve packageAPI $ server repo)
