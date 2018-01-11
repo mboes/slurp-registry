@@ -44,6 +44,7 @@ import           System.Process           (callProcess, cwd, proc,
                                            readCreateProcess,
                                            readCreateProcessWithExitCode, shell)
 import qualified Text.URI                 as URI
+import System.IO (hPutStrLn, stderr)
 
 data RuntimeOptions w = RuntimeOptions
   { _serverPort :: w ::: Maybe Int <?> "Port on which to host the server."
@@ -105,25 +106,22 @@ instance Aeson.FromJSON Package where
 
 data Repository = Repository
   { repoPath      :: Path Abs Dir
-    -- | Path to the git executable
-  , repoGit       :: String
     -- | Lock to ensure that only one thread may write to the repo at a given time
   , repoWriteLock :: MVar ()
   }
 
 -- | Take the write lock on the repo
 withRepoLock :: Repository -> (Path Abs Dir -> IO a) -> IO a
-withRepoLock (Repository path _git lock) f = withMVar lock $ \() -> f path
+withRepoLock (Repository path lock) f = withMVar lock $ \() -> f path
 
 -- | Initialise a local clone of the authoritative repository
 initRepository :: RuntimeOptions Opts.Unwrapped -> IO Repository
 initRepository ro = do
   rootDir <- parseAbsDir $ ro ^. repositoryCacheDir . to T.unpack
   cacheDir <- createTempDir rootDir "slurp"
-  git <- readCreateProcess (shell "which git") ""
   callProcess "git" ["clone", ro ^. repositoryUrl . to T.unpack, toFilePath cacheDir]
   lock <- newMVar ()
-  return $ Repository cacheDir git lock
+  return $ Repository cacheDir lock
 
 -- | Sync the clone with upstream master
 syncRepository :: Repository -> IO ()
@@ -158,7 +156,6 @@ addPackage repo package = do
   syncRepository repo
   let indexChar = T.index (name package) 0
       packageFile = toFilePath (repoPath repo) </> [indexChar]
-      git = repoGit repo
   currentPackages <-
     either (\(_:: SomeException) -> []) (fromMaybe [] . Aeson.decodeStrict)
     <$> try (BS.readFile packageFile)
@@ -166,12 +163,19 @@ addPackage repo package = do
     Nothing -> let newPackages = sort $ package : currentPackages in
       withRepoLock repo $ \path -> do
         BSL.writeFile packageFile $ Aeson.encode newPackages
-        readCreateProcessWithExitCode
+        (_, err, _) <-readCreateProcessWithExitCode
+          (proc "git" [ "add" , packageFile])
+          { cwd = Just $ toFilePath path }
+          ""
+        hPutStrLn stderr err
+        (_, err, _) <-readCreateProcessWithExitCode
           (proc "git" [ "commit", "-m"
                       , "Add package " <> (T.unpack $ name package)
+                      , "."
                       ])
           { cwd = Just $ toFilePath path }
           ""
+        hPutStrLn stderr err
         readCreateProcessWithExitCode
           (proc "git" ["push", "origin", "master"])
           { cwd = Just $ toFilePath path }
@@ -183,6 +187,7 @@ addPackage repo package = do
 -- | List all packages
 listPackages :: Repository -> IO [Package]
 listPackages repo = do
+  syncRepository repo
   (_, files) <- listDir $ repoPath repo
   packages <- forM files $ \file -> do
     either (\(_:: SomeException) -> []) (fromMaybe [] . Aeson.decodeStrict)
