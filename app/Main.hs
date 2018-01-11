@@ -55,20 +55,10 @@ type PackageAPI
   = "packages" :> Get '[JSON] [Package] :<|>
     "packages" :> ReqBody '[JSON] Package :> Post '[JSON] AddPackageResponse
 
--- | Scheme through which this package's versions are served
-data Scheme
-  = Hackage
-  | Git
-  deriving (Eq, Show, Generic)
-
-instance Aeson.ToJSON Scheme
-instance Aeson.FromJSON Scheme
-
 data Package = Package
   { name     :: Text
   , location :: URI.URI
   , date     :: Time.UTCTime
-  , scheme   :: Scheme
   } deriving (Eq, Show, Generic)
 
 instance Ord Package where
@@ -83,7 +73,6 @@ instance Aeson.ToJSON Package where
             Time.defaultTimeLocale
             (Time.iso8601DateFormat (Just "%H:%M:%SZ"))
             date
-      , "scheme" .= show scheme
       ]
 
 instance Aeson.FromJSON Package where
@@ -95,7 +84,6 @@ instance Aeson.FromJSON Package where
           Left exc  -> fail (show exc)
           Right uri -> return uri)
       <*> v .: "date"
-      <*> v .: "scheme"
 
 data Repository = Repository
   { repoPath      :: Path Abs Dir
