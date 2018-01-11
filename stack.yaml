@@ -6,3 +6,4 @@ nix:
   packages:
   - pkgconfig
   - zlib
+  path: ["nixpkgs=./nixpkgs.nix"]
