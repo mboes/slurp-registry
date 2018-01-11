@@ -1,49 +1,54 @@
-{-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE DeriveGeneric       #-}
-{-# LANGUAGE FlexibleInstances   #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving  #-}
-{-# LANGUAGE TemplateHaskell     #-}
-{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Main where
 
-import           Control.Concurrent.MVar  (MVar, newMVar, withMVar)
-import           Control.Exception        (SomeException, try)
-import           Control.Lens             (makeLenses, non, to, (^.), (^?))
-import           Control.Monad            (forM, join)
-import           Control.Monad.IO.Class   (liftIO)
-import           Data.Aeson               ((.:), (.=))
-import qualified Data.Aeson               as Aeson
-import           Data.ByteString          (ByteString)
-import qualified Data.ByteString          as BS
-import qualified Data.ByteString.Lazy     as BSL
-import           Data.Foldable            (find)
-import           Data.List                (sort)
-import           Data.Maybe               (fromMaybe)
-import           Data.Monoid              ((<>))
-import           Data.Ord                 (comparing)
-import           Data.Proxy               (Proxy (..))
-import           Data.Text                (Text)
-import qualified Data.Text                as T
-import qualified Data.Time                as Time
-import qualified Data.Time.Format         as Time
-import           GHC.Generics             (Generic)
+import Control.Concurrent.MVar (MVar, newMVar, withMVar)
+import Control.Exception (SomeException, try)
+import Control.Lens (makeLenses, non, to, (^.), (^?))
+import Control.Monad (forM, join)
+import Control.Monad.IO.Class (liftIO)
+import Data.Aeson ((.:), (.=))
+import qualified Data.Aeson as Aeson
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BSL
+import Data.Foldable (find)
+import Data.List (sort)
+import Data.Maybe (fromMaybe)
+import Data.Monoid ((<>))
+import Data.Ord (comparing)
+import Data.Proxy (Proxy (..))
+import Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Time as Time
+import qualified Data.Time.Format as Time
+import GHC.Generics (Generic)
 import qualified Network.Wai.Handler.Warp as Warp
-import           Options.Generic
-import qualified Options.Generic          as Opts
-import           Path                     hiding ((</>))
-import           Path.IO                  (createTempDir, listDir)
-import           Servant
-import           Servant.Swagger
-import           System.Exit              (ExitCode (..))
-import           System.FilePath          ((</>))
-import           System.Process           (callProcess, cwd, proc,
-                                           readCreateProcess,
-                                           readCreateProcessWithExitCode, shell)
-import qualified Text.URI                 as URI
+import Options.Generic
+import qualified Options.Generic as Opts
+import Path hiding ((</>))
+import Path.IO (createTempDir, listDir)
+import Servant
+import Servant.Swagger
+import System.Exit (ExitCode (..))
+import System.FilePath ((</>))
+import System.Process
+  ( callProcess
+  , cwd
+  , proc
+  , readCreateProcess
+  , readCreateProcessWithExitCode
+  , shell
+  )
+import qualified Text.URI as URI
 import System.IO (hPutStrLn, stderr)
 
 data RuntimeOptions w = RuntimeOptions
