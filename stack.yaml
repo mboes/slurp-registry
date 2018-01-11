@@ -1,7 +1,9 @@
-resolver: lts-10.2
+resolver: lts-10.3
 packages:
 - .
 
+extra-deps:
+  - optparse-generic-1.2.3
+
 nix:
-  packages:
-  - zlib
+  shell-file: shell.nix
