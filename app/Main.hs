@@ -58,7 +58,7 @@ type PackageAPI
 data Package = Package
   { name     :: Text
   , location :: URI.URI
-  , date     :: Time.UTCTime
+  , date     :: Maybe Time.UTCTime
   } deriving (Eq, Show, Generic)
 
 instance Ord Package where
@@ -69,10 +69,10 @@ instance Aeson.ToJSON Package where
       [ "name" .= name
       , "location" .= URI.render location
       , "date" .=
-          Time.formatTime
-            Time.defaultTimeLocale
-            (Time.iso8601DateFormat (Just "%H:%M:%SZ"))
-            date
+        (Time.formatTime
+          Time.defaultTimeLocale
+          (Time.iso8601DateFormat (Just "%H:%M:%SZ")) <$>
+          date)
       ]
 
 instance Aeson.FromJSON Package where
