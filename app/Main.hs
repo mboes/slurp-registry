@@ -128,13 +128,14 @@ initRepository ro = do
 -- | Sync the clone with upstream master
 syncRepository :: Repository -> IO ()
 syncRepository r = withRepoLock r $ \repo -> do
-  (ec, _, _) <-
+  (ec, _, err) <-
     readCreateProcessWithExitCode
-      (proc (repoGit r) ["pull", "origin", "master"]) { cwd = Just $ toFilePath repo }
+      (proc "git" ["pull", "origin", "master"]) { cwd = Just $ toFilePath repo }
       ""
   case ec of
     ExitSuccess   -> return ()
-    ExitFailure _ -> error "Failed to sync upstream repository"
+    ExitFailure _ -> do
+      error $ "Failed to sync upstream repository:\n" <> err
 
 data AddPackageResponse
   = PackageAdded
@@ -166,13 +167,13 @@ addPackage repo package = do
       withRepoLock repo $ \path -> do
         BSL.writeFile packageFile $ Aeson.encode newPackages
         readCreateProcessWithExitCode
-          (proc git [ "commit", "-m"
+          (proc "git" [ "commit", "-m"
                       , "Add package " <> (T.unpack $ name package)
                       ])
           { cwd = Just $ toFilePath path }
           ""
         readCreateProcessWithExitCode
-          (proc git ["push", "origin", "master"])
+          (proc "git" ["push", "origin", "master"])
           { cwd = Just $ toFilePath path }
           ""
         return $ PackageAdded
