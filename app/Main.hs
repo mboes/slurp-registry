@@ -26,7 +26,7 @@ import Data.Monoid ((<>))
 import Data.Ord (comparing)
 import Data.Proxy (Proxy (..))
 import Data.Text (Text)
-import qualified Data.Text as T
+import qualified Data.Text as Text
 import qualified Data.Time as Time
 import GHC.Generics (Generic)
 import qualified Network.Wai.Handler.Warp as Warp
@@ -35,29 +35,21 @@ import qualified Options.Generic as Opts
 import Path hiding ((</>))
 import Path.IO (createTempDir, listDir)
 import Servant
-import System.Exit (ExitCode (..))
 import System.FilePath ((</>))
-import System.Process
-  ( callProcess
-  , cwd
-  , proc
-  , readCreateProcessWithExitCode
-  )
+import System.Process.Typed
 import qualified Text.URI as URI
-import System.IO (hPutStrLn, stderr)
 
 data RuntimeOptions w = RuntimeOptions
   { _serverPort :: w ::: Maybe Int <?> "Port on which to host the server."
   , _repositoryUrl :: w ::: Text <?> "Authoritative server hosting the SLURP repository"
   , _repositoryCacheDir :: w ::: Text <?> "Where to cache the git repo locally"
   } deriving (Generic)
+makeLenses ''RuntimeOptions
 
 instance ParseRecord (RuntimeOptions Opts.Wrapped) where
   parseRecord = parseRecordWithModifiers lispCaseModifiers
 
 deriving instance Show (RuntimeOptions Opts.Unwrapped)
-
-makeLenses ''RuntimeOptions
 
 type PackageAPI
   = "packages" :> Get '[JSON] [Package] :<|>
@@ -118,23 +110,21 @@ withRepoLock (Repository path lock) f = withMVar lock $ \() -> f path
 -- | Initialise a local clone of the authoritative repository
 initRepository :: RuntimeOptions Opts.Unwrapped -> IO Repository
 initRepository ro = do
-    rootDir <- parseAbsDir $ ro^.repositoryCacheDir.to T.unpack
+    rootDir <- parseAbsDir $ ro^.repositoryCacheDir.to Text.unpack
     cacheDir <- createTempDir rootDir "slurp"
-    callProcess "git" ["clone", ro^.repositoryUrl.to T.unpack, toFilePath cacheDir]
+    runProcess_ $
+      proc
+        "git"
+        ["clone", ro^.repositoryUrl.to Text.unpack, toFilePath cacheDir]
     lock <- newMVar ()
     return $ Repository cacheDir lock
 
 -- | Sync the clone with upstream master
 syncRepository :: Repository -> IO ()
 syncRepository r = withRepoLock r $ \repo -> do
-    (ec, _, err) <-
-      readCreateProcessWithExitCode
-        (proc "git" ["pull", "origin", "master"]) { cwd = Just $ toFilePath repo }
-        ""
-    case ec of
-      ExitSuccess -> return ()
-      ExitFailure _ -> do
-        error $ "Failed to sync upstream repository:\n" <> err
+    runProcess_ $
+      setWorkingDir (toFilePath repo) $
+      "git pull origin master"
 
 data AddPackageResponse
   = PackageAdded
@@ -155,7 +145,7 @@ instance Aeson.ToJSON AddPackageResponse
 addPackage :: Repository -> Package -> IO AddPackageResponse
 addPackage repo package = do
     syncRepository repo
-    let indexChar = T.index (name package) 0
+    let indexChar = Text.index (name package) 0
         packageFile = toFilePath (repoPath repo) </> [indexChar]
     currentPackages <-
       either
@@ -166,23 +156,21 @@ addPackage repo package = do
       Nothing -> let newPackages = sort $ package : currentPackages in
         withRepoLock repo $ \path -> do
           BSL.writeFile packageFile $ Aeson.encode newPackages
-          (_, err1, _) <-readCreateProcessWithExitCode
-            (proc "git" [ "add" , packageFile])
-            { cwd = Just $ toFilePath path }
-            ""
-          hPutStrLn stderr err1
-          (_, err2, _) <-readCreateProcessWithExitCode
-            (proc "git" [ "commit", "-m"
-                        , "Add package " <> (T.unpack $ name package)
-                        , "."
-                        ])
-            { cwd = Just $ toFilePath path }
-            ""
-          hPutStrLn stderr err2
-          _ <- readCreateProcessWithExitCode
-            (proc "git" ["push", "origin", "master"])
-            { cwd = Just $ toFilePath path }
-            ""
+          runProcess_ $
+            setWorkingDir (toFilePath path) $
+            proc "git" ["add", packageFile]
+          runProcess_ $
+            setWorkingDir (toFilePath path) $
+            proc
+              "git"
+              [ "commit"
+              , "-m"
+              , "Add package " <> (Text.unpack $ name package)
+              ,  "."
+              ]
+          runProcess_ $
+            setWorkingDir (toFilePath path) $
+            "git push origin master"
           return $ PackageAdded
       Just exists -> return $ PackageAlreadyOwned exists
 
