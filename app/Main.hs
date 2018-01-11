@@ -12,12 +12,11 @@ module Main where
 
 import Control.Concurrent.MVar (MVar, newMVar, withMVar)
 import Control.Exception (SomeException, try)
-import Control.Lens (makeLenses, non, to, (^.), (^?))
+import Control.Lens (makeLenses, non, to, (^.))
 import Control.Monad (forM, join)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as Aeson
-import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import Data.Foldable (find)
@@ -29,7 +28,6 @@ import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Time as Time
-import qualified Data.Time.Format as Time
 import GHC.Generics (Generic)
 import qualified Network.Wai.Handler.Warp as Warp
 import Options.Generic
@@ -37,16 +35,13 @@ import qualified Options.Generic as Opts
 import Path hiding ((</>))
 import Path.IO (createTempDir, listDir)
 import Servant
-import Servant.Swagger
 import System.Exit (ExitCode (..))
 import System.FilePath ((</>))
 import System.Process
   ( callProcess
   , cwd
   , proc
-  , readCreateProcess
   , readCreateProcessWithExitCode
-  , shell
   )
 import qualified Text.URI as URI
 import System.IO (hPutStrLn, stderr)
@@ -171,20 +166,20 @@ addPackage repo package = do
       Nothing -> let newPackages = sort $ package : currentPackages in
         withRepoLock repo $ \path -> do
           BSL.writeFile packageFile $ Aeson.encode newPackages
-          (_, err, _) <-readCreateProcessWithExitCode
+          (_, err1, _) <-readCreateProcessWithExitCode
             (proc "git" [ "add" , packageFile])
             { cwd = Just $ toFilePath path }
             ""
-          hPutStrLn stderr err
-          (_, err, _) <-readCreateProcessWithExitCode
+          hPutStrLn stderr err1
+          (_, err2, _) <-readCreateProcessWithExitCode
             (proc "git" [ "commit", "-m"
                         , "Add package " <> (T.unpack $ name package)
                         , "."
                         ])
             { cwd = Just $ toFilePath path }
             ""
-          hPutStrLn stderr err
-          readCreateProcessWithExitCode
+          hPutStrLn stderr err2
+          _ <- readCreateProcessWithExitCode
             (proc "git" ["push", "origin", "master"])
             { cwd = Just $ toFilePath path }
             ""
