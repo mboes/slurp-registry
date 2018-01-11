@@ -30,9 +30,6 @@ dependencies:
 - wai
 - warp
 
-pkg-config-dependencies:
-- zlib
-
 executables:
   slurp-registry-exe:
     main: Main.hs
