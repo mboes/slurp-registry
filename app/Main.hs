@@ -166,7 +166,6 @@ addPackage repo package = do
 -- | List all packages
 listPackages :: Repository -> IO [Package]
 listPackages repo = do
-    syncRepository repo
     (_, files) <- listDir $ repoPath repo
     packages <- forM files $ \file -> do
       either
