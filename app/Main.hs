@@ -15,7 +15,6 @@ import Control.Exception (SomeException, try)
 import Control.Lens (makeLenses, non, to, (^.))
 import Control.Monad (forM, join)
 import Control.Monad.IO.Class (liftIO)
-import Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
@@ -23,26 +22,29 @@ import Data.Foldable (find)
 import Data.List (sort)
 import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
-import Data.Ord (comparing)
 import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import qualified Data.Text as Text
-import qualified Data.Time as Time
+import qualified Data.Text.IO as Text
 import GHC.Generics (Generic)
 import qualified Network.Wai.Handler.Warp as Warp
+import qualified Network.Wai.Handler.WarpTLS as Warp
 import Options.Generic
 import qualified Options.Generic as Opts
 import Path hiding ((</>))
 import Path.IO (createTempDir, listDir)
 import Servant
+import Slurp.Registry.API
 import System.FilePath ((</>))
+import System.IO (stderr)
 import System.Process.Typed
-import qualified Text.URI as URI
 
 data RuntimeOptions w = RuntimeOptions
   { _serverPort :: w ::: Maybe Int <?> "Port on which to host the server."
   , _repositoryUrl :: w ::: Text <?> "Authoritative server hosting the SLURP repository"
   , _repositoryCacheDir :: w ::: Text <?> "Where to cache the git repo locally"
+  , _tlsCertificate :: w ::: Maybe Text <?> "Path to the TLS certificate to use when serving HTTPS"
+  , _tlsKey :: w ::: Maybe Text <?> "Path to the TLS key to use when serving HTTPS"
   } deriving (Generic)
 makeLenses ''RuntimeOptions
 
@@ -50,40 +52,6 @@ instance ParseRecord (RuntimeOptions Opts.Wrapped) where
   parseRecord = parseRecordWithModifiers lispCaseModifiers
 
 deriving instance Show (RuntimeOptions Opts.Unwrapped)
-
-type PackageAPI
-  = "packages" :> Get '[JSON] [Package] :<|>
-    "packages" :> ReqBody '[JSON] Package :> Post '[JSON] AddPackageResponse
-
-data Package = Package
-  { name     :: Text
-  , location :: URI.URI
-  , date     :: Maybe Time.UTCTime
-  } deriving (Eq, Show, Generic)
-
-instance Ord Package where
-  compare = comparing name
-
-instance Aeson.ToJSON Package where
-  toJSON Package{..} = Aeson.object
-      [ "name" .= name
-      , "location" .= URI.render location
-      , "date" .=
-        (Time.formatTime
-          Time.defaultTimeLocale
-          (Time.iso8601DateFormat (Just "%H:%M:%SZ")) <$>
-          date)
-      ]
-
-instance Aeson.FromJSON Package where
-  parseJSON = Aeson.withObject "Package" $ \v -> Package
-      <$> v .: "name"
-      <*> (do
-        txt <- v .: "location"
-        case URI.mkURI txt of
-          Left exc  -> fail (show exc)
-          Right uri -> return uri)
-      <*> v .: "date"
 
 data Repository = Repository
   { repoPath      :: Path Abs Dir
@@ -113,15 +81,6 @@ syncRepository r = withRepoLock r $ \repo -> do
     runProcess_ $
       setWorkingDir (toFilePath repo) $
       "git pull origin master"
-
-data AddPackageResponse
-  = PackageAdded
-  | PackageAlreadyOwned Package
-  | PackageNameInvalid
-  deriving (Eq, Generic, Show)
-
-instance Aeson.FromJSON AddPackageResponse
-instance Aeson.ToJSON AddPackageResponse
 
 -- | Add a package. This will:
 --   - Sync the repository
@@ -154,7 +113,7 @@ addPackage repo package = do
               [ "commit"
               , "-m"
               , "Add package " <> (Text.unpack $ name package)
-              ,  "."
+              , "."
               ]
           runProcess_ $
             setWorkingDir (toFilePath path) $
@@ -165,7 +124,6 @@ addPackage repo package = do
 -- | List all packages
 listPackages :: Repository -> IO [Package]
 listPackages repo = do
-    syncRepository repo
     (_, files) <- listDir $ repoPath repo
     packages <- forM files $ \file -> do
       either
@@ -178,14 +136,30 @@ packageAPI :: Proxy PackageAPI
 packageAPI = Proxy
 
 server :: Repository -> Server PackageAPI
-server repo = listPackagesHandler :<|> addPackageHandler
+server repo =
+         listPackagesHandler
+    :<|> addPackageHandler
+    :<|> syncHandler
   where
     listPackagesHandler = liftIO $ listPackages repo
     addPackageHandler :: Package -> Handler AddPackageResponse
     addPackageHandler = liftIO . addPackage repo
+    syncHandler :: Handler NoContent
+    syncHandler = liftIO (syncRepository repo) >> return NoContent
+
 
 main :: IO ()
 main = do
     args <- unwrapRecord "slurp-registry"
     repo <- initRepository args
-    Warp.run (args^.serverPort.non 8081) (serve packageAPI $ server repo)
+    case (args ^. tlsCertificate, args ^. tlsKey) of
+      (Just cert, Just key) -> do
+        Warp.runTLS
+          (Warp.tlsSettings (Text.unpack cert) (Text.unpack key))
+          (Warp.setPort (args^.serverPort.non 8081) Warp.defaultSettings)
+          (serve packageAPI $ server repo)
+      (Nothing, Nothing) ->
+        Warp.run (args^.serverPort.non 8081) (serve packageAPI $ server repo)
+      _ -> do
+        Text.hPutStrLn stderr "Both --tls-key and --tls-certificate must be\
+                              \ specified to run HTTPS"
