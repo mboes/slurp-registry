@@ -29,6 +29,7 @@ dependencies:
 - transformers
 - wai
 - warp
+- warp-tls
 
 executables:
   slurp-registry-exe:

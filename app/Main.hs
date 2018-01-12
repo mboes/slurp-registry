@@ -27,15 +27,18 @@ import Data.Ord (comparing)
 import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.IO as Text
 import qualified Data.Time as Time
 import GHC.Generics (Generic)
 import qualified Network.Wai.Handler.Warp as Warp
+import qualified Network.Wai.Handler.WarpTLS as Warp
 import Options.Generic
 import qualified Options.Generic as Opts
 import Path hiding ((</>))
 import Path.IO (createTempDir, listDir)
 import Servant
 import System.FilePath ((</>))
+import System.IO (stderr)
 import System.Process.Typed
 import qualified Text.URI as URI
 
@@ -43,6 +46,8 @@ data RuntimeOptions w = RuntimeOptions
   { _serverPort :: w ::: Maybe Int <?> "Port on which to host the server."
   , _repositoryUrl :: w ::: Text <?> "Authoritative server hosting the SLURP repository"
   , _repositoryCacheDir :: w ::: Text <?> "Where to cache the git repo locally"
+  , _tlsCertificate :: w ::: Maybe Text <?> "Path to the TLS certificate to use when serving HTTPS"
+  , _tlsKey :: w ::: Maybe Text <?> "Path to the TLS key to use when serving HTTPS"
   } deriving (Generic)
 makeLenses ''RuntimeOptions
 
@@ -155,7 +160,7 @@ addPackage repo package = do
               [ "commit"
               , "-m"
               , "Add package " <> (Text.unpack $ name package)
-              ,  "."
+              , "."
               ]
           runProcess_ $
             setWorkingDir (toFilePath path) $
@@ -194,4 +199,14 @@ main :: IO ()
 main = do
     args <- unwrapRecord "slurp-registry"
     repo <- initRepository args
-    Warp.run (args^.serverPort.non 8081) (serve packageAPI $ server repo)
+    case (args ^. tlsCertificate, args ^. tlsKey) of
+      (Just cert, Just key) -> do
+        Warp.runTLS
+          (Warp.tlsSettings (Text.unpack cert) (Text.unpack key))
+          (Warp.setPort (args^.serverPort.non 8081) Warp.defaultSettings)
+          (serve packageAPI $ server repo)
+      (Nothing, Nothing) ->
+        Warp.run (args^.serverPort.non 8081) (serve packageAPI $ server repo)
+      _ -> do
+        Text.hPutStrLn stderr "Both --tls-key and --tls-certificate must be \
+                              \ specified to run HTTPS"
