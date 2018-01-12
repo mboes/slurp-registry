@@ -52,8 +52,9 @@ instance ParseRecord (RuntimeOptions Opts.Wrapped) where
 deriving instance Show (RuntimeOptions Opts.Unwrapped)
 
 type PackageAPI
-  = "packages" :> Get '[JSON] [Package] :<|>
-    "packages" :> ReqBody '[JSON] Package :> Post '[JSON] AddPackageResponse
+  = "packages" :> Get '[JSON] [Package]
+  :<|> "packages" :> ReqBody '[JSON] Package :> Post '[JSON] AddPackageResponse
+  :<|> "sync" :> Post '[JSON] NoContent
 
 data Package = Package
   { name     :: Text
@@ -178,11 +179,17 @@ packageAPI :: Proxy PackageAPI
 packageAPI = Proxy
 
 server :: Repository -> Server PackageAPI
-server repo = listPackagesHandler :<|> addPackageHandler
+server repo =
+         listPackagesHandler
+    :<|> addPackageHandler
+    :<|> syncHandler
   where
     listPackagesHandler = liftIO $ listPackages repo
     addPackageHandler :: Package -> Handler AddPackageResponse
     addPackageHandler = liftIO . addPackage repo
+    syncHandler :: Handler NoContent
+    syncHandler = liftIO (syncRepository repo) >> return NoContent
+
 
 main :: IO ()
 main = do
