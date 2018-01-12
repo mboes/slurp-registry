@@ -15,7 +15,6 @@ import Control.Exception (SomeException, try)
 import Control.Lens (makeLenses, non, to, (^.))
 import Control.Monad (forM, join)
 import Control.Monad.IO.Class (liftIO)
-import Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
@@ -23,12 +22,10 @@ import Data.Foldable (find)
 import Data.List (sort)
 import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
-import Data.Ord (comparing)
 import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text
-import qualified Data.Time as Time
 import GHC.Generics (Generic)
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai.Handler.WarpTLS as Warp
@@ -41,7 +38,6 @@ import Slurp.Registry.API
 import System.FilePath ((</>))
 import System.IO (stderr)
 import System.Process.Typed
-import qualified Text.URI as URI
 
 data RuntimeOptions w = RuntimeOptions
   { _serverPort :: w ::: Maybe Int <?> "Port on which to host the server."
