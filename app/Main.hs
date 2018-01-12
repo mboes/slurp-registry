@@ -37,6 +37,7 @@ import qualified Options.Generic as Opts
 import Path hiding ((</>))
 import Path.IO (createTempDir, listDir)
 import Servant
+import Slurp.Registry.API
 import System.FilePath ((</>))
 import System.IO (stderr)
 import System.Process.Typed
@@ -55,41 +56,6 @@ instance ParseRecord (RuntimeOptions Opts.Wrapped) where
   parseRecord = parseRecordWithModifiers lispCaseModifiers
 
 deriving instance Show (RuntimeOptions Opts.Unwrapped)
-
-type PackageAPI
-  = "packages" :> Get '[JSON] [Package]
-  :<|> "packages" :> ReqBody '[JSON] Package :> Post '[JSON] AddPackageResponse
-  :<|> "sync" :> Post '[JSON] NoContent
-
-data Package = Package
-  { name     :: Text
-  , location :: URI.URI
-  , date     :: Maybe Time.UTCTime
-  } deriving (Eq, Show, Generic)
-
-instance Ord Package where
-  compare = comparing name
-
-instance Aeson.ToJSON Package where
-  toJSON Package{..} = Aeson.object
-      [ "name" .= name
-      , "location" .= URI.render location
-      , "date" .=
-        (Time.formatTime
-          Time.defaultTimeLocale
-          (Time.iso8601DateFormat (Just "%H:%M:%SZ")) <$>
-          date)
-      ]
-
-instance Aeson.FromJSON Package where
-  parseJSON = Aeson.withObject "Package" $ \v -> Package
-      <$> v .: "name"
-      <*> (do
-        txt <- v .: "location"
-        case URI.mkURI txt of
-          Left exc  -> fail (show exc)
-          Right uri -> return uri)
-      <*> v .: "date"
 
 data Repository = Repository
   { repoPath      :: Path Abs Dir
@@ -119,15 +85,6 @@ syncRepository r = withRepoLock r $ \repo -> do
     runProcess_ $
       setWorkingDir (toFilePath repo) $
       "git pull origin master"
-
-data AddPackageResponse
-  = PackageAdded
-  | PackageAlreadyOwned Package
-  | PackageNameInvalid
-  deriving (Eq, Generic, Show)
-
-instance Aeson.FromJSON AddPackageResponse
-instance Aeson.ToJSON AddPackageResponse
 
 -- | Add a package. This will:
 --   - Sync the repository
@@ -208,5 +165,5 @@ main = do
       (Nothing, Nothing) ->
         Warp.run (args^.serverPort.non 8081) (serve packageAPI $ server repo)
       _ -> do
-        Text.hPutStrLn stderr "Both --tls-key and --tls-certificate must be \
+        Text.hPutStrLn stderr "Both --tls-key and --tls-certificate must be\
                               \ specified to run HTTPS"
