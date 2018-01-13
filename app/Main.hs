@@ -54,17 +54,21 @@ initRepository ro = do
     Path.createTempDir path "slurp" >>= Repository.clone (ro^.repositoryUrl)
 
 main :: IO ()
-main = do
+main = Wai.withStdoutLogger $ \logger -> do
     args <- Options.unwrapRecord "slurp-registry"
     repo <- initRepository args
+    let settings =
+          Warp.setPort (args^.serverPort.non 8080) $
+          Warp.setLogger logger $
+          Warp.defaultSettings
     case (args ^. tlsCertificate, args ^. tlsKey) of
       (Just cert, Just key) -> do
         Warp.runTLS
           (Warp.tlsSettings (Text.unpack cert) (Text.unpack key))
-          (Warp.setPort (args^.serverPort.non 8081) Warp.defaultSettings)
-          (Servant.serve packageAPI $ server repo)
+          settings
+          (Servant.serve packageAPI (server repo))
       (Nothing, Nothing) ->
-        Warp.run (args^.serverPort.non 8081) (Servant.serve packageAPI $ server repo)
+        Warp.runSettings settings (Servant.serve packageAPI (server repo))
       _ -> do
         Text.hPutStrLn
           stderr

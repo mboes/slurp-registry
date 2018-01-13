@@ -39,5 +39,6 @@ executables:
     - path-io
     - slurp-registry
     - typed-process
+    - wai-logger
     - warp
     - warp-tls
