@@ -29,15 +29,16 @@ import qualified Data.Text.IO as Text
 import GHC.Generics (Generic)
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai.Handler.WarpTLS as Warp
-import Options.Generic
-import qualified Options.Generic as Opts
+import qualified Options.Generic as Options
+import Options.Generic ((:::), type (<?>))
 import Path hiding ((</>))
 import Path.IO (createTempDir, listDir)
-import Servant
+import qualified Servant
+import Servant ((:<|>)(..))
 import Slurp.Registry.API
 import System.FilePath ((</>))
 import System.IO (stderr)
-import System.Process.Typed
+import System.Process.Typed (proc, runProcess, runProcess_, setWorkingDir)
 
 data RuntimeOptions w = RuntimeOptions
   { _serverPort :: w ::: Maybe Int <?> "Port on which to host the server."
@@ -48,13 +49,13 @@ data RuntimeOptions w = RuntimeOptions
   } deriving (Generic)
 makeLenses ''RuntimeOptions
 
-instance ParseRecord (RuntimeOptions Opts.Wrapped) where
-  parseRecord = parseRecordWithModifiers lispCaseModifiers
+instance Options.ParseRecord (RuntimeOptions Options.Wrapped) where
+  parseRecord = Options.parseRecordWithModifiers Options.lispCaseModifiers
 
-deriving instance Show (RuntimeOptions Opts.Unwrapped)
+deriving instance Show (RuntimeOptions Options.Unwrapped)
 
 data Repository = Repository
-  { repoPath      :: Path Abs Dir
+  { repoPath :: Path Abs Dir
     -- | Lock to ensure that only one thread may write to the repo at a given time
   , repoWriteLock :: MVar ()
   }
@@ -64,7 +65,7 @@ withRepoLock :: Repository -> (Path Abs Dir -> IO a) -> IO a
 withRepoLock (Repository path lock) f = withMVar lock $ \() -> f path
 
 -- | Initialise a local clone of the authoritative repository
-initRepository :: RuntimeOptions Opts.Unwrapped -> IO Repository
+initRepository :: RuntimeOptions Options.Unwrapped -> IO Repository
 initRepository ro = do
     rootDir <- parseAbsDir $ ro^.repositoryCacheDir.to Text.unpack
     cacheDir <- createTempDir rootDir "slurp"
@@ -135,31 +136,32 @@ listPackages repo = do
 packageAPI :: Proxy PackageAPI
 packageAPI = Proxy
 
-server :: Repository -> Server PackageAPI
+server :: Repository -> Servant.Server PackageAPI
 server repo =
-         listPackagesHandler
-    :<|> addPackageHandler
-    :<|> syncHandler
+    listPackagesHandler :<|>
+    addPackageHandler :<|>
+    syncHandler
   where
+    listPackagesHandler :: Servant.Handler [Package]
     listPackagesHandler = liftIO $ listPackages repo
-    addPackageHandler :: Package -> Handler AddPackageResponse
+    addPackageHandler :: Package -> Servant.Handler AddPackageResponse
     addPackageHandler = liftIO . addPackage repo
-    syncHandler :: Handler NoContent
-    syncHandler = liftIO (syncRepository repo) >> return NoContent
+    syncHandler :: Servant.Handler Servant.NoContent
+    syncHandler = liftIO (syncRepository repo) >> return Servant.NoContent
 
 
 main :: IO ()
 main = do
-    args <- unwrapRecord "slurp-registry"
+    args <- Options.unwrapRecord "slurp-registry"
     repo <- initRepository args
     case (args ^. tlsCertificate, args ^. tlsKey) of
       (Just cert, Just key) -> do
         Warp.runTLS
           (Warp.tlsSettings (Text.unpack cert) (Text.unpack key))
           (Warp.setPort (args^.serverPort.non 8081) Warp.defaultSettings)
-          (serve packageAPI $ server repo)
+          (Servant.serve packageAPI $ server repo)
       (Nothing, Nothing) ->
-        Warp.run (args^.serverPort.non 8081) (serve packageAPI $ server repo)
+        Warp.run (args^.serverPort.non 8081) (Servant.serve packageAPI $ server repo)
       _ -> do
         Text.hPutStrLn stderr "Both --tls-key and --tls-certificate must be\
                               \ specified to run HTTPS"
