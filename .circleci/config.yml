@@ -11,6 +11,8 @@ jobs:
           command: |
             apk update --no-progress && apk --no-progress add ca-certificates bash
             nix-env -f nixpkgs.nix -iA stack
+            mkdir -p ~/.stack
+            echo 'nix: { enable: true }' > ~/.stack/config.yaml
       - run:
           name: Compute cache key
           command: |
@@ -22,20 +24,20 @@ jobs:
       - run:
           name: Build dependencies
           command: |
-            stack --no-terminal --nix build --only-snapshot --prefetch --test --bench
-            stack --no-terminal --nix build hlint weeder
+            stack --no-terminal build --only-snapshot --prefetch --test --bench
+            stack --no-terminal build hlint weeder
       - save_cache:
           key: slurp-registry-stack-dependencies-{{ arch }}-{{ checksum "/tmp/stack-deps" }}
           paths:
             - ~/.stack
       - run:
           name: Build project
-          command: stack --nix --no-terminal build --fast --pedantic --test --bench --no-run-tests --no-run-benchmarks
+          command: stack --no-terminal build --fast --pedantic --test --bench --no-run-tests --no-run-benchmarks
       - run:
           name: Check for weeds and lint
           command: |
-            stack --no-terminal --nix --no-nix-pure exec hlint api app
-            stack --no-terminal --nix --no-nix-pure exec weeder
+            stack --no-terminal --no-nix-pure exec hlint api app
+            stack --no-terminal --no-nix-pure exec weeder
       - run:
           name: Test
-          command: stack --nix --no-terminal test
+          command: stack --no-terminal test
