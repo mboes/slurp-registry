@@ -60,3 +60,6 @@ type PackageAPI
   = "packages" :> Get '[JSON] [Package]
   :<|> "packages" :> ReqBody '[JSON] Package :> Post '[JSON] AddPackageResponse
   :<|> "sync" :> Post '[JSON] NoContent
+
+packageAPI :: Proxy PackageAPI
+packageAPI = Proxy
