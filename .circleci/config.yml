@@ -16,10 +16,16 @@ jobs:
       - run:
           name: Compute cache key
           command: |
-            find . -name "*.cabal" -o -name "*.nix" -o -name "stack.yaml" -type f | sort | xargs cat > /tmp/stack-deps
+            find . \
+              -path ".circleci/config.yml" -o \
+              -name "stack.yaml" -o \
+              -name "*.cabal" -o \
+              -name "*.nix" \
+              -type f | \
+              sort | xargs cat > /tmp/stack-deps
       - restore_cache:
           keys:
-            - slurp-registry-stack-dependencies-{{ arch }}-{{ checksum "/tmp/stack-deps" }}-1
+            - slurp-registry-stack-dependencies-{{ arch }}-{{ checksum "/tmp/stack-deps" }}
             - slurp-registry-stack-dependencies-{{ arch }}-
       - run:
           name: Build dependencies
@@ -27,7 +33,7 @@ jobs:
             stack --no-terminal build --only-snapshot --prefetch --test --bench
             stack --no-terminal build hlint weeder
       - save_cache:
-          key: slurp-registry-stack-dependencies-{{ arch }}-{{ checksum "/tmp/stack-deps" }}-1
+          key: slurp-registry-stack-dependencies-{{ arch }}-{{ checksum "/tmp/stack-deps" }}
           paths:
             - ~/.stack
       - run:
