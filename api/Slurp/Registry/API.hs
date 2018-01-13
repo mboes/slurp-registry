@@ -8,6 +8,7 @@
 
 module Slurp.Registry.API where
 
+import Control.Applicative (optional)
 import Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as Aeson
 import Data.Text (Text)
@@ -45,7 +46,7 @@ instance Aeson.FromJSON Package where
         case URI.mkURI txt of
           Left exc  -> fail (show exc)
           Right uri -> return uri)
-      <*> v .: "date"
+      <*> optional (v .: "date")
 
 data AddPackageResponse
   = PackageAdded
