@@ -6,42 +6,23 @@
 
 module Handlers (Repository(..), server) where
 
-import Control.Concurrent.MVar (MVar, withMVar)
 import Control.Exception (SomeException, try)
 import Control.Monad (forM, join)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BSL
 import Data.Foldable (find)
 import Data.List (sort)
 import Data.Maybe (fromMaybe)
-import Data.Monoid ((<>))
 import qualified Data.Text as Text
-import Path (Path, Abs, Dir, toFilePath)
+import qualified Path
 import Path.IO (listDir)
+import qualified Repository
+import Repository (Repository(..))
 import qualified Servant
 import Servant ((:<|>)(..))
 import Slurp.Registry.API
 import System.FilePath ((</>))
-import System.Process.Typed (proc, runProcess_, setWorkingDir)
-
-data Repository = Repository
-  { repoPath :: Path Abs Dir
-    -- | Lock to ensure that only one thread may write to the repo at a given time
-  , repoWriteLock :: MVar ()
-  }
-
--- | Take the write lock on the repo
-withRepoLock :: Repository -> (Path Abs Dir -> IO a) -> IO a
-withRepoLock (Repository path lock) f = withMVar lock $ \() -> f path
-
--- | Sync the clone with upstream master
-syncRepository :: Repository -> IO ()
-syncRepository r = withRepoLock r $ \repo -> do
-    runProcess_ $
-      setWorkingDir (toFilePath repo) $
-      "git pull origin master"
 
 -- | Add a package. This will:
 --   - Sync the repository
@@ -52,34 +33,20 @@ syncRepository r = withRepoLock r $ \repo -> do
 --   - Push to upstream
 addPackage :: Repository -> Package -> IO AddPackageResponse
 addPackage repo package = do
-    syncRepository repo
+    Repository.sync repo
     let indexChar = Text.index (name package) 0
-        packageFile = toFilePath (repoPath repo) </> [indexChar]
+        packageFile = Path.toFilePath (repoPath repo) </> [indexChar]
     currentPackages <-
       either
         (\(_:: SomeException) -> [])
         (fromMaybe [] . Aeson.decodeStrict) <$>
         try (BS.readFile packageFile)
     case find (\p -> name p == name package) currentPackages of
-      Nothing -> let newPackages = sort $ package : currentPackages in
-        withRepoLock repo $ \path -> do
-          BSL.writeFile packageFile $ Aeson.encode newPackages
-          runProcess_ $
-            setWorkingDir (toFilePath path) $
-            proc "git" ["add", packageFile]
-          runProcess_ $
-            setWorkingDir (toFilePath path) $
-            proc
-              "git"
-              [ "commit"
-              , "-m"
-              , "Add package " <> Text.unpack (name package)
-              , "."
-              ]
-          runProcess_ $
-            setWorkingDir (toFilePath path) $
-            "git push origin master"
-          return PackageAdded
+      Nothing -> do
+        let newPackages = sort $ package : currentPackages
+        Repository.commit repo (name package) packageFile (Aeson.encode newPackages)
+        Repository.sync repo
+        return PackageAdded
       Just exists -> return $ PackageAlreadyOwned exists
 
 -- | List all packages
@@ -90,7 +57,7 @@ listPackages repo = do
       either
         (\(_:: SomeException) -> [])
         (fromMaybe [] . Aeson.decodeStrict) <$>
-        try (BS.readFile $ toFilePath file)
+        try (BS.readFile $ Path.toFilePath file)
     return $ join packages
 
 server :: Repository -> Servant.Server PackageAPI
@@ -104,4 +71,4 @@ server repo =
     addPackageHandler :: Package -> Servant.Handler AddPackageResponse
     addPackageHandler = liftIO . addPackage repo
     syncHandler :: Servant.Handler Servant.NoContent
-    syncHandler = liftIO (syncRepository repo) >> return Servant.NoContent
+    syncHandler = liftIO (Repository.sync repo) >> return Servant.NoContent

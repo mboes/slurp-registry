@@ -44,15 +44,13 @@ deriving instance Show (RuntimeOptions Options.Unwrapped)
 
 -- | Initialise a local clone of the authoritative repository
 initRepository :: RuntimeOptions Options.Unwrapped -> IO Repository
-initRepository ro = do
-    rootDir <- parseAbsDir $ ro^.repositoryCacheDir.to Text.unpack
-    cacheDir <- createTempDir rootDir "slurp"
-    runProcess_ $
-      proc
-        "git"
-        ["clone", ro^.repositoryUrl.to Text.unpack, toFilePath cacheDir]
-    lock <- newMVar ()
-    return $ Repository cacheDir lock
+initRepository ro =
+    case ro^.repositoryCacheDir of
+      Nothing ->
+        Path.withSystemTempDir "slurp" (clone (ro^.repositoryUrl))
+      Just fpath -> do
+        path <- Path.parseAbsDir fpath
+        Path.withTempDir path "slurp" (clone (ro^.repositoryUrl))
 
 main :: IO ()
 main = do
