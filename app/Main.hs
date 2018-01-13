@@ -10,31 +10,35 @@
 
 module Main where
 
-import Control.Concurrent.MVar (newMVar)
-import Control.Lens (makeLenses, non, to, (^.))
+import Control.Lens (makeLenses, non, (^.))
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text
 import GHC.Generics (Generic)
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai.Handler.WarpTLS as Warp
-import qualified Options.Generic as Options
+import qualified Network.Wai.Logger as Wai
 import Options.Generic ((:::), type (<?>))
-import Path (parseAbsDir, toFilePath)
-import Path.IO (createTempDir)
+import qualified Options.Generic as Options
+import qualified Path
+import qualified Path.IO as Path
 import qualified Servant
 import Slurp.Registry.API
 import Slurp.Registry.Handlers
 import qualified Slurp.Registry.Repository as Repository
 import System.IO (stderr)
-import System.Process.Typed (proc, runProcess_)
 
 data RuntimeOptions w = RuntimeOptions
-  { _serverPort :: w ::: Maybe Int <?> "Port on which to host the server."
-  , _repositoryUrl :: w ::: Text <?> "Authoritative server hosting the SLURP repository"
-  , _repositoryCacheDir :: w ::: Text <?> "Where to cache the git repo locally"
-  , _tlsCertificate :: w ::: Maybe Text <?> "Path to the TLS certificate to use when serving HTTPS"
-  , _tlsKey :: w ::: Maybe Text <?> "Path to the TLS key to use when serving HTTPS"
+  { _serverPort :: w ::: Maybe Int
+    <?> "Port on which to host the server."
+  , _repositoryUrl :: w ::: String
+    <?> "Authoritative server hosting the SLURP repository."
+  , _repositoryCacheDir :: w ::: Maybe FilePath
+    <?> "Where to cache the git repo locally."
+  , _tlsCertificate :: w ::: Maybe Text
+    <?> "Path to the TLS certificate to use when serving over HTTPS."
+  , _tlsKey :: w ::: Maybe Text
+    <?> "Path to the TLS key to use when serving over HTTPS."
   } deriving (Generic)
 makeLenses ''RuntimeOptions
 
@@ -43,7 +47,7 @@ instance Options.ParseRecord (RuntimeOptions Options.Wrapped) where
 
 deriving instance Show (RuntimeOptions Options.Unwrapped)
 
--- | Initialise a local clone of the authoritative repository
+-- | Initialise a local clone of the authoritative repository.
 initRepository :: RuntimeOptions Options.Unwrapped -> IO Repository
 initRepository ro =
     case ro^.repositoryCacheDir of
@@ -66,5 +70,6 @@ main = do
       (Nothing, Nothing) ->
         Warp.run (args^.serverPort.non 8081) (Servant.serve packageAPI $ server repo)
       _ -> do
-        Text.hPutStrLn stderr "Both --tls-key and --tls-certificate must be\
-                              \ specified to run HTTPS"
+        Text.hPutStrLn
+          stderr
+          "Both --tls-key and --tls-certificate must be specified to enable HTTPS."
