@@ -133,9 +133,6 @@ listPackages repo = do
         try (BS.readFile $ toFilePath file)
     return $ join packages
 
-packageAPI :: Proxy PackageAPI
-packageAPI = Proxy
-
 server :: Repository -> Servant.Server PackageAPI
 server repo =
     listPackagesHandler :<|>

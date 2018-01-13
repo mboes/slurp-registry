@@ -14,27 +14,16 @@ extra-source-files:
 dependencies:
 - aeson >= 1.2
 - base >= 4.7 && < 5
-- bytestring >= 0.10
-- filepath
-- lens
-- modern-uri >= 0.1
-- optparse-generic
-- path
-- path-io
-- typed-process
 - servant-server >= 0.11
-- servant-swagger >= 1.1
 - text
-- time
-- transformers
-- wai
-- warp
-- warp-tls
 
 library:
   source-dirs: api
   exposed-modules:
-    - Slurp.Registry.API
+  - Slurp.Registry.API
+  dependencies:
+  - modern-uri >= 0.1
+  - time
 
 executables:
   slurp-registry-exe:
@@ -42,4 +31,13 @@ executables:
     source-dirs: app
     ghc-options: [-threaded, -rtsopts, -with-rtsopts=-N]
     dependencies:
-      - slurp-registry
+    - bytestring >= 0.10
+    - filepath
+    - lens
+    - optparse-generic
+    - path
+    - path-io
+    - slurp-registry
+    - typed-process
+    - warp
+    - warp-tls
