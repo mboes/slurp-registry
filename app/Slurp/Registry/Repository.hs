@@ -1,6 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Slurp.Registry.Repository where
+module Slurp.Registry.Repository
+  ( Repository(..)
+  , clone
+  , commit
+  , sync
+  ) where
 
 import Control.Concurrent.MVar (MVar, newMVar, withMVar)
 import qualified Data.ByteString.Lazy as BSL
