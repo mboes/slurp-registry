@@ -32,7 +32,7 @@ dependencies:
 - warp-tls
 
 library:
-  source-dirs: lib
+  source-dirs: api
   exposed-modules:
     - Slurp.Registry.API
 
