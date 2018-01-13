@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Repository where
+module Slurp.Registry.Repository where
 
 import Control.Concurrent.MVar (MVar, newMVar, withMVar)
 import qualified Data.ByteString.Lazy as BSL
@@ -28,7 +28,7 @@ clone url cacheDir = do
     return $ Repository cacheDir lock
 
 commit :: Repository -> Text.Text -> FilePath -> BSL.ByteString -> IO ()
-commit r pkgname packageFile content = Repository.withRepoLock r $ \path -> do
+commit r pkgname packageFile content = withRepoLock r $ \path -> do
     BSL.writeFile packageFile content
     runProcess_ $
       setWorkingDir (Path.toFilePath path) $

@@ -4,7 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Handlers (Repository(..), server) where
+module Slurp.Registry.Handlers (Repository(..), server) where
 
 import Control.Exception (SomeException, try)
 import Control.Monad (forM, join)
@@ -17,11 +17,11 @@ import Data.Maybe (fromMaybe)
 import qualified Data.Text as Text
 import qualified Path
 import Path.IO (listDir)
-import qualified Repository
-import Repository (Repository(..))
 import qualified Servant
 import Servant ((:<|>)(..))
 import Slurp.Registry.API
+import qualified Slurp.Registry.Repository as Repository
+import Slurp.Registry.Repository (Repository(..))
 import System.FilePath ((</>))
 
 -- | Add a package. This will:

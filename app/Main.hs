@@ -16,7 +16,6 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text
 import GHC.Generics (Generic)
-import Handlers
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai.Handler.WarpTLS as Warp
 import qualified Options.Generic as Options
@@ -25,6 +24,8 @@ import Path (parseAbsDir, toFilePath)
 import Path.IO (createTempDir)
 import qualified Servant
 import Slurp.Registry.API
+import Slurp.Registry.Handlers
+import qualified Slurp.Registry.Repository as Repository
 import System.IO (stderr)
 import System.Process.Typed (proc, runProcess_)
 
@@ -47,10 +48,10 @@ initRepository :: RuntimeOptions Options.Unwrapped -> IO Repository
 initRepository ro =
     case ro^.repositoryCacheDir of
       Nothing ->
-        Path.withSystemTempDir "slurp" (clone (ro^.repositoryUrl))
+        Path.withSystemTempDir "slurp" (Repository.clone (ro^.repositoryUrl))
       Just fpath -> do
         path <- Path.parseAbsDir fpath
-        Path.withTempDir path "slurp" (clone (ro^.repositoryUrl))
+        Path.withTempDir path "slurp" (Repository.clone (ro^.repositoryUrl))
 
 main :: IO ()
 main = do
