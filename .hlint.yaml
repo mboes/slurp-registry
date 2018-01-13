@@ -1,0 +1,8 @@
+# HLint configuration file
+# https://github.com/ndmitchell/hlint
+
+# Not considered useful hints
+- ignore: {name: "Redundant do"}
+- ignore: {name: "Redundant $"}
+- ignore: {name: "Eta reduce"}
+- ignore: {name: "Parse error"}  # we trust the compiler over HLint
