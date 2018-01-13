@@ -49,13 +49,9 @@ deriving instance Show (RuntimeOptions Options.Unwrapped)
 
 -- | Initialise a local clone of the authoritative repository.
 initRepository :: RuntimeOptions Options.Unwrapped -> IO Repository
-initRepository ro =
-    case ro^.repositoryCacheDir of
-      Nothing ->
-        Path.withSystemTempDir "slurp" (Repository.clone (ro^.repositoryUrl))
-      Just fpath -> do
-        path <- Path.parseAbsDir fpath
-        Path.withTempDir path "slurp" (Repository.clone (ro^.repositoryUrl))
+initRepository ro = do
+    path <- maybe Path.getTempDir Path.parseAbsDir $ ro^.repositoryCacheDir
+    Path.createTempDir path "slurp" >>= Repository.clone (ro^.repositoryUrl)
 
 main :: IO ()
 main = do
