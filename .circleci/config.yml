@@ -23,6 +23,7 @@ jobs:
           name: Build dependencies
           command: |
             stack --no-terminal --nix build --only-snapshot --prefetch --test --bench
+            stack --no-terminal --nix build weeder
       - save_cache:
           key: slurp-registry-stack-dependencies-{{ arch }}-{{ checksum "/tmp/stack-deps" }}
           paths:
@@ -30,6 +31,10 @@ jobs:
       - run:
           name: Build project
           command: stack --nix --no-terminal build --pedantic --test --bench --no-run-tests --no-run-benchmarks
+      - run:
+          name: Check for weeds
+          command: |
+            stack --no-terminal --nix --no-nix-pure exec weeder
       - run:
           name: Test
           command: stack --nix --no-terminal test
