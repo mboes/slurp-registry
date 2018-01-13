@@ -25,15 +25,14 @@ jobs:
               sort | xargs cat > /tmp/stack-deps
       - restore_cache:
           keys:
-            - slurp-registry-stack-dependencies-{{ arch }}-{{ checksum "/tmp/stack-deps" }}
-            - slurp-registry-stack-dependencies-{{ arch }}-
+            - 01-slurp-registry-stack-dependencies-{{ arch }}-{{ checksum "/tmp/stack-deps" }}
       - run:
           name: Build dependencies
           command: |
             stack --no-terminal build --only-snapshot --prefetch --test --bench
             stack --no-terminal build hlint weeder
       - save_cache:
-          key: slurp-registry-stack-dependencies-{{ arch }}-{{ checksum "/tmp/stack-deps" }}
+          key: 01-slurp-registry-stack-dependencies-{{ arch }}-{{ checksum "/tmp/stack-deps" }}
           paths:
             - ~/.stack
       - run:
