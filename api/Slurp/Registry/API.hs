@@ -47,18 +47,9 @@ instance Aeson.FromJSON Package where
           Right uri -> return uri)
       <*> v .:? "ctime"
 
-data AddPackageResponse
-  = PackageAdded
-  | PackageAlreadyOwned Package
-  | PackageNameInvalid
-  deriving (Eq, Generic, Show)
-
-instance Aeson.FromJSON AddPackageResponse
-instance Aeson.ToJSON AddPackageResponse
-
 type PackageAPI
   = "packages" :> Get '[JSON] [Package]
-  :<|> "packages" :> ReqBody '[JSON] Package :> Post '[JSON] AddPackageResponse
+  :<|> "packages" :> ReqBody '[JSON] Package :> PostNoContent '[JSON] NoContent
   :<|> "sync" :> Post '[JSON] NoContent
 
 packageAPI :: Proxy PackageAPI
