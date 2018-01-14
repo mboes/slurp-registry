@@ -12,6 +12,7 @@ import Control.Monad (forM)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
+import Data.Char (isAlphaNum)
 import Data.Maybe (catMaybes)
 import qualified Data.Text as Text
 import qualified Path
@@ -22,6 +23,20 @@ import Slurp.Registry.API
 import qualified Slurp.Registry.Repository as Repository
 import Slurp.Registry.Repository (Repository(..))
 
+-- | Check that the package name is legal. Throw an error otherwise.
+checkPackageName :: Text.Text -> Servant.Handler ()
+checkPackageName pkgname
+  | Text.all legalChar pkgname
+  , Text.length pkgname >= 1
+  , Text.length pkgname <= 64
+  , Text.head pkgname /= '-'
+  , Text.last pkgname /= '-'
+  = return ()
+  | otherwise
+  = Servant.throwError Servant.err400 { Servant.errBody = "Invalid package name." }
+  where
+    legalChar c = isAlphaNum c || c == '-'
+
 -- | Add a package. This will:
 --   - Sync the repository
 --   - Load the correct file
@@ -31,6 +46,7 @@ import Slurp.Registry.Repository (Repository(..))
 --   - Push to upstream
 addPackage :: Repository -> Package -> Servant.Handler Servant.NoContent
 addPackage repo newpkg = do
+    checkPackageName (name newpkg)
     liftIO $ Repository.sync repo
     pkgFile <-
       (repoPath repo Path.</>) <$>
