@@ -8,8 +8,7 @@
 
 module Slurp.Registry.API where
 
-import Control.Applicative (optional)
-import Data.Aeson ((.:), (.=))
+import Data.Aeson ((.:), (.:?), (.=))
 import qualified Data.Aeson as Aeson
 import Data.Text (Text)
 import qualified Data.Time as Time
@@ -21,7 +20,7 @@ import Data.Ord (comparing)
 data Package = Package
   { name     :: Text
   , location :: URI.URI
-  , date     :: Maybe Time.UTCTime
+  , ctime     :: Maybe Time.UTCTime
   } deriving (Eq, Show, Generic)
 
 instance Ord Package where
@@ -31,11 +30,11 @@ instance Aeson.ToJSON Package where
   toJSON Package{..} = Aeson.object
       [ "name" .= name
       , "location" .= URI.render location
-      , "date" .=
+      , "ctime" .=
         (Time.formatTime
           Time.defaultTimeLocale
           (Time.iso8601DateFormat (Just "%H:%M:%SZ")) <$>
-          date)
+          ctime)
       ]
 
 instance Aeson.FromJSON Package where
@@ -46,7 +45,7 @@ instance Aeson.FromJSON Package where
         case URI.mkURI txt of
           Left exc  -> fail (show exc)
           Right uri -> return uri)
-      <*> optional (v .: "date")
+      <*> v .:? "ctime"
 
 data AddPackageResponse
   = PackageAdded
