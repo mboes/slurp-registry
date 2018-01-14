@@ -14,7 +14,8 @@ import qualified Data.ByteString.Lazy as BSL
 import Data.Monoid ((<>))
 import qualified Path
 import Path (Abs, Dir, File, Path)
-import System.Process.Typed (proc, runProcess_, setWorkingDir)
+import System.Exit (ExitCode(..))
+import System.Process.Typed (proc, runProcess, runProcess_, setWorkingDir)
 
 data Repository = Repository
   { repoPath :: Path Abs Dir
@@ -45,13 +46,15 @@ checkin r packageFile content = liftIO $ withRepoLock r $ \path -> do
         "git"
         [ "commit", "-m", "Add package " <> show packageFile]
 
-checkout :: MonadIO m => Repository -> Path Abs File -> m BSL.ByteString
+checkout :: MonadIO m => Repository -> Path Abs File -> m (Maybe BSL.ByteString)
 checkout Repository{repoPath = path} packageFile = liftIO $ do
     -- Always checkout first to avoid reading partial content from files.
-    runProcess_ $
+    rc <- runProcess $
       setWorkingDir (Path.toFilePath path) $
       proc "git" ["checkout", Path.toFilePath packageFile]
-    BSL.readFile (Path.toFilePath packageFile)
+    case rc of
+      ExitSuccess -> Just <$> BSL.readFile (Path.toFilePath packageFile)
+      ExitFailure _ -> return Nothing
 
 -- | Sync with upstream master branch.
 sync :: MonadIO m => Repository -> m ()

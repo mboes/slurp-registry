@@ -11,7 +11,6 @@ import Control.Exception (SomeException, try)
 import Control.Monad (forM)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.Aeson as Aeson
-import qualified Data.ByteString as BS
 import Data.Char (isAlphaNum)
 import Data.Maybe (catMaybes)
 import qualified Data.Text as Text
@@ -51,27 +50,23 @@ addPackage repo newpkg = do
     pkgFile <-
       (repoPath repo Path.</>) <$>
       Path.parseRelFile (Text.unpack (name newpkg))
-    exists <- Path.doesFileExist pkgFile
-    if exists
-    then do
-      Aeson.eitherDecodeStrict' <$>
-        liftIO (BS.readFile (Path.toFilePath pkgFile)) >>= \case
-          Left err -> fail err
-          Right oldpkg
-            | location oldpkg == location newpkg -> return Servant.NoContent
-            | otherwise -> Servant.throwError $
-              Servant.err400 { Servant.errBody = "Package already added." }
-    else do
-      liftIO $ Repository.checkin repo pkgFile (Aeson.encode newpkg)
-      liftIO $ Repository.sync repo
-      return Servant.NoContent
+    fmap Aeson.eitherDecode' <$> Repository.checkout repo pkgFile >>= \case
+      Nothing -> do
+        liftIO $ Repository.checkin repo pkgFile (Aeson.encode newpkg)
+        liftIO $ Repository.sync repo
+        return Servant.NoContent
+      Just (Left err) -> fail err
+      Just (Right oldpkg)
+        | location oldpkg == location newpkg -> return Servant.NoContent
+        | otherwise -> Servant.throwError $
+          Servant.err400 { Servant.errBody = "Package already added." }
 
 -- | List all packages
 listPackages :: Repository -> Servant.Handler [Package]
 listPackages repo = liftIO $ do
     (_, files) <- Path.listDir $ repoPath repo
     packages <- forM files $ \file -> do
-      either (\(_:: SomeException) -> Nothing) Aeson.decode' <$>
+      either (\(_:: SomeException) -> Nothing) (>>= Aeson.decode') <$>
         try (Repository.checkout repo file)
     return $ catMaybes packages
 
