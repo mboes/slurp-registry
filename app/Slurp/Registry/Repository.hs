@@ -12,7 +12,7 @@ import qualified Data.ByteString.Lazy as BSL
 import Data.Monoid ((<>))
 import qualified Data.Text as Text
 import qualified Path
-import Path (Abs, Dir, Path)
+import Path (Abs, Dir, File, Path, Rel)
 import System.Process.Typed (proc, runProcess_, setWorkingDir)
 
 data Repository = Repository
@@ -32,12 +32,12 @@ clone url cacheDir = do
     lock <- newMVar ()
     return $ Repository cacheDir lock
 
-commit :: Repository -> Text.Text -> FilePath -> BSL.ByteString -> IO ()
+commit :: Repository -> Text.Text -> Path Rel File -> BSL.ByteString -> IO ()
 commit r pkgname packageFile content = withRepoLock r $ \path -> do
-    BSL.writeFile packageFile content
+    BSL.writeFile (Path.toFilePath packageFile) content
     runProcess_ $
       setWorkingDir (Path.toFilePath path) $
-      proc "git" ["add", packageFile]
+      proc "git" ["add", Path.toFilePath packageFile]
     runProcess_ $
       setWorkingDir (Path.toFilePath path) $
       proc
