@@ -3,16 +3,16 @@
 module Slurp.Registry.Repository
   ( Repository(..)
   , clone
-  , commit
+  , checkin
+  , checkout
   , sync
   ) where
 
 import Control.Concurrent.MVar (MVar, newMVar, withMVar)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Monoid ((<>))
-import qualified Data.Text as Text
 import qualified Path
-import Path (Abs, Dir, File, Path, Rel)
+import Path (Abs, Dir, File, Path)
 import System.Process.Typed (proc, runProcess_, setWorkingDir)
 
 data Repository = Repository
@@ -32,8 +32,8 @@ clone url cacheDir = do
     lock <- newMVar ()
     return $ Repository cacheDir lock
 
-commit :: Repository -> Text.Text -> Path Rel File -> BSL.ByteString -> IO ()
-commit r pkgname packageFile content = withRepoLock r $ \path -> do
+checkin :: Repository -> Path Abs File -> BSL.ByteString -> IO ()
+checkin r packageFile content = withRepoLock r $ \path -> do
     BSL.writeFile (Path.toFilePath packageFile) content
     runProcess_ $
       setWorkingDir (Path.toFilePath path) $
@@ -42,7 +42,15 @@ commit r pkgname packageFile content = withRepoLock r $ \path -> do
       setWorkingDir (Path.toFilePath path) $
       proc
         "git"
-        [ "commit", "-m", "Add package " <> Text.unpack pkgname, "."]
+        [ "commit", "-m", "Add package " <> show packageFile]
+
+checkout :: Repository -> Path Abs File -> IO BSL.ByteString
+checkout Repository{repoPath = path} packageFile = do
+    -- Always checkout first to avoid reading partial content from files.
+    runProcess_ $
+      setWorkingDir (Path.toFilePath path) $
+      proc "git" ["checkout", Path.toFilePath packageFile]
+    BSL.readFile (Path.toFilePath packageFile)
 
 -- | Sync with upstream master branch.
 sync :: Repository -> IO ()

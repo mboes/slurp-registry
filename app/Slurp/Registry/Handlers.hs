@@ -31,7 +31,9 @@ import Slurp.Registry.Repository (Repository(..))
 addPackage :: Repository -> Package -> IO AddPackageResponse
 addPackage repo newpkg = do
     Repository.sync repo
-    pkgFile <- Path.parseRelFile (Text.unpack (name newpkg))
+    pkgFile <-
+      (repoPath repo Path.</>) <$>
+      Path.parseRelFile (Text.unpack (name newpkg))
     exists <- Path.doesFileExist pkgFile
     if exists
     then do
@@ -41,7 +43,7 @@ addPackage repo newpkg = do
           | location oldpkg == location newpkg -> return PackageAdded
           | otherwise -> return $ PackageAlreadyOwned oldpkg
     else do
-      Repository.commit repo (name newpkg) pkgFile (Aeson.encode newpkg)
+      Repository.checkin repo pkgFile (Aeson.encode newpkg)
       Repository.sync repo
       return PackageAdded
 
@@ -50,8 +52,8 @@ listPackages :: Repository -> IO [Package]
 listPackages repo = do
     (_, files) <- Path.listDir $ repoPath repo
     packages <- forM files $ \file -> do
-      either (\(_:: SomeException) -> Nothing) Aeson.decodeStrict' <$>
-        try (BS.readFile $ Path.toFilePath file)
+      either (\(_:: SomeException) -> Nothing) Aeson.decode' <$>
+        try (Repository.checkout repo file)
     return $ catMaybes packages
 
 server :: Repository -> Servant.Server PackageAPI
