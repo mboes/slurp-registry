@@ -2,7 +2,9 @@ name: slurp-registry
 version: 0.1.0.0
 github: mboes/slurp-registry
 license: PublicDomain
-author: Mathieu Boespflug
+author:
+- Mathieu Boespflug
+- Nicholas Clarke
 maintainer: m@tweag.io
 synopsis: Global registry of Haskell packages.
 category: Web
